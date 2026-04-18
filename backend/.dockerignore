@@ -1,0 +1,10 @@
+.git
+.env
+.env.*
+bin/
+dist/
+coverage/
+*.md
+*.log
+.sisyphus/
+node_modules/

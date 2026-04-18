@@ -1,0 +1,1 @@
+Verification pending in this environment: Go toolchain unavailable, so `go run` and `curl http://localhost:8080/health` could not be executed here.

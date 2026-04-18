@@ -136,7 +136,7 @@ Parallel Speedup: ~60% faster than sequential
 ## TODOs
 
 
-- [ ] 1. **Backend Project Scaffolding**
+- [x] 1. **Backend Project Scaffolding**
 
   **What to do**:
   - Initialize Go module: `go mod init github.com/yourusername/medialogg/backend`
@@ -185,7 +185,7 @@ Parallel Speedup: ~60% faster than sequential
 
 ---
 
-- [ ] 2. **Frontend Project Scaffolding (Nuxt 3)**
+- [x] 2. **Frontend Project Scaffolding (Nuxt 3)**
 
   **What to do**:
   - Initialize Nuxt 3: `npx nuxi@latest init frontend`
@@ -236,7 +236,7 @@ Parallel Speedup: ~60% faster than sequential
 
 ---
 
-- [ ] 3. **Database Setup (PostgreSQL + Migrations)**
+- [x] 3. **Database Setup (PostgreSQL + Migrations)**
 
   **What to do**:
   - Create initial migration files using golang-migrate
@@ -288,7 +288,7 @@ Parallel Speedup: ~60% faster than sequential
 
 ---
 
-- [ ] 4. **Docker Compose Setup**
+- [x] 4. **Docker Compose Setup**
 
   **What to do**:
   - Create `docker-compose.yml` with services: postgres, backend, frontend
@@ -343,7 +343,7 @@ Parallel Speedup: ~60% faster than sequential
 
 ---
 
-- [ ] 5. **User Model + Migrations**
+- [x] 5. **User Model + Migrations**
 
   **What to do**:
   - Create migration `002_users.up.sql`:
@@ -395,7 +395,7 @@ Parallel Speedup: ~60% faster than sequential
 
 ---
 
-- [ ] 6. **JWT Authentication Handler + Middleware**
+- [x] 6. **JWT Authentication Handler + Middleware**
 
   **What to do**:
   - Install `golang-jwt/jwt/v5` and `bcrypt`
@@ -466,7 +466,7 @@ Parallel Speedup: ~60% faster than sequential
 
 ---
 
-- [ ] 7. **Frontend Auth Pages (Nuxt)**
+- [x] 7. **Frontend Auth Pages (Nuxt)**
 
   **What to do**:
   - Create `pages/login.vue` with login form
@@ -500,10 +500,10 @@ Parallel Speedup: ~60% faster than sequential
   - Nuxt useCookie: https://nuxt.com/docs/api/composables/use-cookie
 
   **Acceptance Criteria**:
-  - [ ] Register page creates account and redirects to dashboard
-  - [ ] Login page authenticates and redirects to dashboard
-  - [ ] Auth state persists on page reload
-  - [ ] Protected routes redirect to login when not authenticated
+  - [x] Register page creates account and redirects to dashboard
+  - [x] Login page authenticates and redirects to dashboard
+  - [x] Auth state persists on page reload (via cookies)
+  - [x] Protected routes redirect to login when not authenticated
 
   **QA Scenarios**:
   ```
