@@ -38,7 +38,7 @@ func (h *SocialHandler) FollowUser(c *fiber.Ctx) error {
 		})
 	}
 
-	if targetUser.ID.String() == followerID {
+	if uuidToString(targetUser.ID) == followerID {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "cannot follow yourself",
 		})

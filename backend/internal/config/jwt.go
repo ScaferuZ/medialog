@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -23,18 +24,14 @@ type TokenPair struct {
 	ExpiresIn    int64  `json:"expires_in"`
 }
 
-const (
-	accessTokenExpiry  = 15 * time.Minute
-	refreshTokenExpiry = 7 * 24 * time.Hour
-)
-
-// GenerateTokenPair creates a new access and refresh token pair for a user
-func GenerateTokenPair(userID pgtype.UUID, username, email, jwtSecret string) (*TokenPair, error) {
-	userIDStr := pgUUIDToString(userID)
+// GenerateTokenPair creates a new access and refresh token pair
+func GenerateTokenPair(userID string, username string, email string, jwtSecret string) (*TokenPair, error) {
+	accessTokenExpiry := time.Hour * 24 // 24 hours
+	refreshTokenExpiry := time.Hour * 24 * 7 // 7 days
 
 	// Create access token
 	accessClaims := Claims{
-		UserID:   userIDStr,
+		UserID:   userID,
 		Username: username,
 		Email:    email,
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -47,26 +44,21 @@ func GenerateTokenPair(userID pgtype.UUID, username, email, jwtSecret string) (*
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims)
 	accessTokenString, err := accessToken.SignedString([]byte(jwtSecret))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("sign access token: %w", err)
 	}
 
 	// Create refresh token
-	refreshClaims := Claims{
-		UserID:   userIDStr,
-		Username: username,
-		Email:    email,
-		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   userIDStr,
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(refreshTokenExpiry)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			NotBefore: jwt.NewNumericDate(time.Now()),
-		},
+	refreshClaims := jwt.RegisteredClaims{
+		Subject:   userID,
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(refreshTokenExpiry)),
+		IssuedAt:  jwt.NewNumericDate(time.Now()),
+		NotBefore: jwt.NewNumericDate(time.Now()),
 	}
 
 	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims)
 	refreshTokenString, err := refreshToken.SignedString([]byte(jwtSecret))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("sign refresh token: %w", err)
 	}
 
 	return &TokenPair{
@@ -77,16 +69,16 @@ func GenerateTokenPair(userID pgtype.UUID, username, email, jwtSecret string) (*
 }
 
 // ValidateToken validates a JWT token and returns the claims
-func ValidateToken(tokenString, jwtSecret string) (*Claims, error) {
+func ValidateToken(tokenString string, jwtSecret string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, errors.New("unexpected signing method")
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 		return []byte(jwtSecret), nil
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse token: %w", err)
 	}
 
 	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
@@ -96,47 +88,35 @@ func ValidateToken(tokenString, jwtSecret string) (*Claims, error) {
 	return nil, errors.New("invalid token")
 }
 
-// RefreshToken generates a new access token from a valid refresh token
-func RefreshToken(refreshTokenString, jwtSecret string) (*TokenPair, error) {
-	token, err := jwt.Parse(refreshTokenString, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, errors.New("unexpected signing method")
-		}
+func RefreshTokens(refreshToken string, jwtSecret string) (*TokenPair, error) {
+	_, err := ValidateToken(refreshToken, jwtSecret)
+	if err != nil {
+		return nil, fmt.Errorf("invalid refresh token: %w", err)
+	}
+
+	token, err := jwt.Parse(refreshToken, func(token *jwt.Token) (interface{}, error) {
 		return []byte(jwtSecret), nil
 	})
-
-	if err != nil || !token.Valid {
-		return nil, errors.New("invalid refresh token")
-	}
-
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		return nil, errors.New("invalid token claims")
-	}
-
-	subject, ok := claims["sub"].(string)
-	if !ok || subject == "" {
-		return nil, errors.New("invalid subject in token")
-	}
-
-	userID, err := stringToPgUUID(subject)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse refresh token: %w", err)
 	}
 
-	_ = userID
+	subject, err := token.Claims.GetSubject()
+	if err != nil {
+		return nil, fmt.Errorf("get subject from token: %w", err)
+	}
+
+	_, err = stringToPgUUID(subject)
+	if err != nil {
+		return nil, fmt.Errorf("invalid user ID in token: %w", err)
+	}
+
 	return &TokenPair{
-		RefreshToken: refreshTokenString,
-		ExpiresIn:    int64(accessTokenExpiry.Seconds()),
+		RefreshToken: refreshToken,
+		ExpiresIn:    int64(time.Hour * 24),
 	}, nil
 }
 
-// pgUUIDToString converts pgtype.UUID to string
-func pgUUIDToString(uuid pgtype.UUID) string {
-	return uuid.String()
-}
-
-// stringToPgUUID converts string to pgtype.UUID
 func stringToPgUUID(s string) (pgtype.UUID, error) {
 	var uuid pgtype.UUID
 	err := uuid.Scan(s)

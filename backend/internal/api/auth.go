@@ -120,7 +120,7 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 		})
 	}
 
-	tokens, err := config.GenerateTokenPair(user.ID, user.Username, user.Email, h.jwtSecret)
+	tokens, err := config.GenerateTokenPair(uuidToString(user.ID), user.Username, user.Email, h.jwtSecret)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to generate tokens",
@@ -173,7 +173,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		})
 	}
 
-	tokens, err := config.GenerateTokenPair(user.ID, user.Username, user.Email, h.jwtSecret)
+	tokens, err := config.GenerateTokenPair(uuidToString(user.ID), user.Username, user.Email, h.jwtSecret)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to generate tokens",
@@ -231,7 +231,7 @@ func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
 
 	_ = userID
 
-	tokens, err := config.GenerateTokenPair(user.ID, user.Username, user.Email, h.jwtSecret)
+	tokens, err := config.GenerateTokenPair(uuidToString(user.ID), user.Username, user.Email, h.jwtSecret)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to generate tokens",
@@ -264,7 +264,7 @@ func (h *AuthHandler) Me(c *fiber.Ctx) error {
 
 func dbUserToResponse(user db.User) UserResponse {
 	resp := UserResponse{
-		ID:        user.ID.String(),
+		ID:        uuidToString(user.ID),
 		Username:  user.Username,
 		Email:     user.Email,
 		IsPublic:  user.IsPublic,
@@ -300,10 +300,4 @@ func validationErrorMessage(e validator.FieldError) string {
 	default:
 		return "invalid value"
 	}
-}
-
-func stringToPgUUID(s string) (pgtype.UUID, error) {
-	var uuid pgtype.UUID
-	err := uuid.Scan(s)
-	return uuid, err
 }

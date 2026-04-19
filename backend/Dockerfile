@@ -1,4 +1,4 @@
-FROM golang:1.25-alpine AS build
+FROM golang:1.23-alpine AS build
 
 WORKDIR /src
 
@@ -7,7 +7,8 @@ RUN apk add --no-cache ca-certificates
 COPY . .
 
 RUN if [ ! -f go.mod ]; then echo "go.mod missing" && exit 1; fi && \
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/server ./cmd/server
+    go mod download && \
+    GOTOOLCHAIN=local CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/server ./cmd/server
 
 FROM alpine:latest
 

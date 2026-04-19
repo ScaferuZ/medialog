@@ -45,7 +45,7 @@ func (h *UsersHandler) GetUserProfile(c *fiber.Ctx) error {
 	// TODO: Check if profile is private and viewer is not following
 
 	resp := UserProfileResponse{
-		ID:        user.ID.String(),
+		ID:        uuidToString(user.ID),
 		Username:  user.Username,
 		IsPublic:  user.IsPublic,
 		CreatedAt: user.CreatedAt.Time.Format("2006-01-02"),
