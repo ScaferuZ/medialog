@@ -1,7 +1,10 @@
 package api
 
 import (
+	"errors"
+
 	"github.com/gofiber/fiber/v2"
+	"github.com/jackc/pgx/v5"
 	"github.com/medialogg/backend/internal/db"
 )
 
@@ -35,10 +38,16 @@ type UserProfileResponse struct {
 func (h *UsersHandler) GetUserProfile(c *fiber.Ctx) error {
 	username := c.Params("username")
 
-	user, err := h.queries.GetUserByUsername(c.Context(), username)
+	user, err := h.queries.GetUserByUsername(c.UserContext(), username)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "user not found",
+		if errors.Is(err, pgx.ErrNoRows) {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "user not found",
+			})
+		}
+
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch user profile",
 		})
 	}
 
@@ -81,15 +90,21 @@ func (h *UsersHandler) GetUserStats(c *fiber.Ctx) error {
 	username := c.Params("username")
 
 	// Get user
-	user, err := h.queries.GetUserByUsername(c.Context(), username)
+	user, err := h.queries.GetUserByUsername(c.UserContext(), username)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "user not found",
+		if errors.Is(err, pgx.ErrNoRows) {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "user not found",
+			})
+		}
+
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch user",
 		})
 	}
 
 	// Get log stats
-	logStats, err := h.queries.GetUserStats(c.Context(), user.ID)
+	logStats, err := h.queries.GetUserStats(c.UserContext(), user.ID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to fetch stats",
@@ -97,8 +112,19 @@ func (h *UsersHandler) GetUserStats(c *fiber.Ctx) error {
 	}
 
 	// Get follower counts
-	followersCount, _ := h.queries.CountFollowers(c.Context(), user.ID)
-	followingCount, _ := h.queries.CountFollowing(c.Context(), user.ID)
+	followersCount, err := h.queries.CountFollowers(c.UserContext(), user.ID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch follower count",
+		})
+	}
+
+	followingCount, err := h.queries.CountFollowing(c.UserContext(), user.ID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch following count",
+		})
+	}
 
 	return c.JSON(UserStatsResponse{
 		CompletedCount:  logStats.CompletedCount,

@@ -212,7 +212,7 @@ func (h *TMDBHandler) SyncMovie(c *fiber.Ctx) error {
 		})
 	}
 
-	media, err := h.service.GetOrFetchMovie(c.Context(), tmdbID)
+	media, err := h.service.GetOrFetchMovie(c.UserContext(), tmdbID)
 	if err != nil {
 		if errors.Is(err, tmdb.ErrMovieNotFound) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{

@@ -48,7 +48,7 @@ func (h *MediaHandler) ListMedia(c *fiber.Ctx) error {
 		offset = 0
 	}
 
-	media, err := h.queries.ListMedia(c.Context(), db.ListMediaParams{
+	media, err := h.queries.ListMedia(c.UserContext(), db.ListMediaParams{
 		Column1: mediaType,
 		Limit:   int32(limit),
 		Offset:  int32(offset),
@@ -59,6 +59,8 @@ func (h *MediaHandler) ListMedia(c *fiber.Ctx) error {
 			"error": "failed to fetch media",
 		})
 	}
+
+	media = ensureSlice(media)
 
 	return c.JSON(fiber.Map{
 		"media": media,
@@ -95,11 +97,11 @@ func (h *MediaHandler) SearchMedia(c *fiber.Ctx) error {
 		limit = 20
 	}
 
-	media, err := h.queries.SearchMedia(c.Context(), db.SearchMediaParams{
-		PlaintoTsvector: query,
-		Column2:         mediaType,
-		Limit:           int32(limit),
-		Offset:          int32(offset),
+	media, err := h.queries.SearchMedia(c.UserContext(), db.SearchMediaParams{
+		Query:   query,
+		Column2: mediaType,
+		Limit:   int32(limit),
+		Offset:  int32(offset),
 	})
 
 	if err != nil {
@@ -107,6 +109,8 @@ func (h *MediaHandler) SearchMedia(c *fiber.Ctx) error {
 			"error": "failed to search media",
 		})
 	}
+
+	media = ensureSlice(media)
 
 	return c.JSON(fiber.Map{
 		"media": media,
@@ -129,7 +133,7 @@ func (h *MediaHandler) GetMedia(c *fiber.Ctx) error {
 		})
 	}
 
-	media, err := h.queries.GetMediaByID(c.Context(), id)
+	media, err := h.queries.GetMediaByID(c.UserContext(), id)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -142,7 +146,8 @@ func (h *MediaHandler) GetMedia(c *fiber.Ctx) error {
 	}
 
 	// Get genres for this media
-	genres, _ := h.queries.GetMediaGenres(c.Context(), media.ID)
+	genres, _ := h.queries.GetMediaGenres(c.UserContext(), media.ID)
+	genres = ensureSlice(genres)
 
 	return c.JSON(fiber.Map{
 		"media":  media,
@@ -174,7 +179,7 @@ func (h *MediaHandler) GetMediaReviews(c *fiber.Ctx) error {
 		offset = 0
 	}
 
-	reviews, err := h.queries.ListReviewsByMedia(c.Context(), db.ListReviewsByMediaParams{
+	reviews, err := h.queries.ListReviewsByMedia(c.UserContext(), db.ListReviewsByMediaParams{
 		MediaID: id,
 		Limit:   int32(limit),
 		Offset:  int32(offset),
@@ -185,6 +190,8 @@ func (h *MediaHandler) GetMediaReviews(c *fiber.Ctx) error {
 			"error": "failed to fetch reviews",
 		})
 	}
+
+	reviews = ensureSlice(reviews)
 
 	return c.JSON(fiber.Map{
 		"reviews": reviews,
