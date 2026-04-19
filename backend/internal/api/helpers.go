@@ -20,3 +20,11 @@ func stringToPgUUID(s string) (pgtype.UUID, error) {
 	err := uuid.Scan(s)
 	return uuid, err
 }
+
+func ensureSlice[T any](items []T) []T {
+	if items == nil {
+		return []T{}
+	}
+
+	return items
+}

@@ -16,16 +16,21 @@ func SetupRoutes(
 	tmdbHandler *TMDBHandler,
 	jwtSecret string,
 ) {
+	authRequired := middleware.AuthMiddleware(jwtSecret)
+
 	auth := api.Group("/auth")
 	auth.Post("/register", authHandler.Register)
 	auth.Post("/login", authHandler.Login)
 	auth.Post("/refresh", authHandler.Refresh)
-	auth.Get("/me", middleware.AuthMiddleware(jwtSecret), authHandler.Me)
+	auth.Get("/me", authRequired, authHandler.Me)
 
 	mediaHandler.RegisterRoutes(api)
-	logsHandler.RegisterRoutes(api)
 	usersHandler.RegisterRoutes(api)
-	socialHandler.RegisterRoutes(api.Group("", middleware.AuthMiddleware(jwtSecret)))
+	logsHandler.RegisterProtectedRoutes(api.Group("/logs", authRequired))
+	socialHandler.RegisterPublicUserRoutes(api.Group("/users"))
+	socialHandler.RegisterProtectedUserRoutes(api.Group("/users", authRequired))
+	socialHandler.RegisterProtectedLogRoutes(api.Group("/logs", authRequired))
+	socialHandler.RegisterProtectedReviewRoutes(api.Group("/reviews", authRequired))
 
 	if tmdbHandler != nil {
 		tmdbHandler.RegisterRoutes(api)

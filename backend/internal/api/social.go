@@ -16,22 +16,31 @@ func NewSocialHandler(queries *db.Queries) *SocialHandler {
 	return &SocialHandler{queries: queries}
 }
 
-func (h *SocialHandler) RegisterRoutes(router fiber.Router) {
-	router.Post("/users/:username/follow", h.FollowUser)
-	router.Delete("/users/:username/follow", h.UnfollowUser)
-	router.Get("/users/:username/followers", h.GetFollowers)
-	router.Get("/users/:username/following", h.GetFollowing)
-	router.Post("/logs/:id/like", h.LikeLog)
-	router.Delete("/logs/:id/like", h.UnlikeLog)
-	router.Post("/reviews/:id/like", h.LikeReview)
-	router.Delete("/reviews/:id/like", h.UnlikeReview)
+func (h *SocialHandler) RegisterPublicUserRoutes(router fiber.Router) {
+	router.Get("/:username/followers", h.GetFollowers)
+	router.Get("/:username/following", h.GetFollowing)
+}
+
+func (h *SocialHandler) RegisterProtectedUserRoutes(router fiber.Router) {
+	router.Post("/:username/follow", h.FollowUser)
+	router.Delete("/:username/follow", h.UnfollowUser)
+}
+
+func (h *SocialHandler) RegisterProtectedLogRoutes(router fiber.Router) {
+	router.Post("/:id/like", h.LikeLog)
+	router.Delete("/:id/like", h.UnlikeLog)
+}
+
+func (h *SocialHandler) RegisterProtectedReviewRoutes(router fiber.Router) {
+	router.Post("/:id/like", h.LikeReview)
+	router.Delete("/:id/like", h.UnlikeReview)
 }
 
 func (h *SocialHandler) FollowUser(c *fiber.Ctx) error {
 	followerID := c.Locals("userID").(string)
 	username := c.Params("username")
 
-	targetUser, err := h.queries.GetUserByUsername(c.Context(), username)
+	targetUser, err := h.queries.GetUserByUsername(c.UserContext(), username)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "user not found",
@@ -51,7 +60,7 @@ func (h *SocialHandler) FollowUser(c *fiber.Ctx) error {
 		})
 	}
 
-	isFollowing, _ := h.queries.IsFollowing(c.Context(), db.IsFollowingParams{
+	isFollowing, _ := h.queries.IsFollowing(c.UserContext(), db.IsFollowingParams{
 		FollowerID:  followerUUID,
 		FollowingID: targetUser.ID,
 	})
@@ -62,7 +71,7 @@ func (h *SocialHandler) FollowUser(c *fiber.Ctx) error {
 		})
 	}
 
-	_, err = h.queries.CreateFollow(c.Context(), db.CreateFollowParams{
+	_, err = h.queries.CreateFollow(c.UserContext(), db.CreateFollowParams{
 		FollowerID:  followerUUID,
 		FollowingID: targetUser.ID,
 	})
@@ -82,7 +91,7 @@ func (h *SocialHandler) UnfollowUser(c *fiber.Ctx) error {
 	followerID := c.Locals("userID").(string)
 	username := c.Params("username")
 
-	targetUser, err := h.queries.GetUserByUsername(c.Context(), username)
+	targetUser, err := h.queries.GetUserByUsername(c.UserContext(), username)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "user not found",
@@ -96,7 +105,7 @@ func (h *SocialHandler) UnfollowUser(c *fiber.Ctx) error {
 		})
 	}
 
-	err = h.queries.DeleteFollow(c.Context(), db.DeleteFollowParams{
+	err = h.queries.DeleteFollow(c.UserContext(), db.DeleteFollowParams{
 		FollowerID:  followerUUID,
 		FollowingID: targetUser.ID,
 	})
@@ -122,14 +131,14 @@ func (h *SocialHandler) GetFollowers(c *fiber.Ctx) error {
 		limit = 50
 	}
 
-	targetUser, err := h.queries.GetUserByUsername(c.Context(), username)
+	targetUser, err := h.queries.GetUserByUsername(c.UserContext(), username)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "user not found",
 		})
 	}
 
-	followers, err := h.queries.ListFollowers(c.Context(), db.ListFollowersParams{
+	followers, err := h.queries.ListFollowers(c.UserContext(), db.ListFollowersParams{
 		FollowingID: targetUser.ID,
 		Limit:       int32(limit),
 		Offset:      int32(offset),
@@ -145,6 +154,7 @@ func (h *SocialHandler) GetFollowers(c *fiber.Ctx) error {
 	for _, follower := range followers {
 		response = append(response, dbUserToResponse(follower))
 	}
+	response = ensureSlice(response)
 
 	return c.JSON(fiber.Map{
 		"followers": response,
@@ -165,14 +175,14 @@ func (h *SocialHandler) GetFollowing(c *fiber.Ctx) error {
 		limit = 50
 	}
 
-	targetUser, err := h.queries.GetUserByUsername(c.Context(), username)
+	targetUser, err := h.queries.GetUserByUsername(c.UserContext(), username)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "user not found",
 		})
 	}
 
-	following, err := h.queries.ListFollowing(c.Context(), db.ListFollowingParams{
+	following, err := h.queries.ListFollowing(c.UserContext(), db.ListFollowingParams{
 		FollowerID: targetUser.ID,
 		Limit:      int32(limit),
 		Offset:     int32(offset),
@@ -188,6 +198,7 @@ func (h *SocialHandler) GetFollowing(c *fiber.Ctx) error {
 	for _, user := range following {
 		response = append(response, dbUserToResponse(user))
 	}
+	response = ensureSlice(response)
 
 	return c.JSON(fiber.Map{
 		"following": response,
@@ -216,14 +227,14 @@ func (h *SocialHandler) LikeLog(c *fiber.Ctx) error {
 		})
 	}
 
-	_, err = h.queries.GetLogByID(c.Context(), logUUID)
+	_, err = h.queries.GetLogByID(c.UserContext(), logUUID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "log not found",
 		})
 	}
 
-	_, err = h.queries.GetLikeByLog(c.Context(), db.GetLikeByLogParams{
+	_, err = h.queries.GetLikeByLog(c.UserContext(), db.GetLikeByLogParams{
 		UserID: userUUID,
 		LogID:  logUUID,
 	})
@@ -233,7 +244,7 @@ func (h *SocialHandler) LikeLog(c *fiber.Ctx) error {
 		})
 	}
 
-	_, err = h.queries.CreateLike(c.Context(), db.CreateLikeParams{
+	_, err = h.queries.CreateLike(c.UserContext(), db.CreateLikeParams{
 		UserID:   userUUID,
 		LogID:    logUUID,
 		ReviewID: pgtype.UUID{},
@@ -268,7 +279,7 @@ func (h *SocialHandler) UnlikeLog(c *fiber.Ctx) error {
 		})
 	}
 
-	err = h.queries.DeleteLike(c.Context(), db.DeleteLikeParams{
+	err = h.queries.DeleteLike(c.UserContext(), db.DeleteLikeParams{
 		UserID:   userUUID,
 		LogID:    logUUID,
 		ReviewID: pgtype.UUID{},
@@ -303,14 +314,14 @@ func (h *SocialHandler) LikeReview(c *fiber.Ctx) error {
 		})
 	}
 
-	_, err = h.queries.GetReviewByID(c.Context(), reviewUUID)
+	_, err = h.queries.GetReviewByID(c.UserContext(), reviewUUID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "review not found",
 		})
 	}
 
-	_, err = h.queries.GetLikeByReview(c.Context(), db.GetLikeByReviewParams{
+	_, err = h.queries.GetLikeByReview(c.UserContext(), db.GetLikeByReviewParams{
 		UserID:   userUUID,
 		ReviewID: reviewUUID,
 	})
@@ -320,7 +331,7 @@ func (h *SocialHandler) LikeReview(c *fiber.Ctx) error {
 		})
 	}
 
-	_, err = h.queries.CreateLike(c.Context(), db.CreateLikeParams{
+	_, err = h.queries.CreateLike(c.UserContext(), db.CreateLikeParams{
 		UserID:   userUUID,
 		LogID:    pgtype.UUID{},
 		ReviewID: reviewUUID,
@@ -355,7 +366,7 @@ func (h *SocialHandler) UnlikeReview(c *fiber.Ctx) error {
 		})
 	}
 
-	err = h.queries.DeleteLike(c.Context(), db.DeleteLikeParams{
+	err = h.queries.DeleteLike(c.UserContext(), db.DeleteLikeParams{
 		UserID:   userUUID,
 		LogID:    pgtype.UUID{},
 		ReviewID: reviewUUID,

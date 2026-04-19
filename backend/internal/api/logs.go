@@ -19,29 +19,36 @@ func NewLogsHandler(queries *db.Queries) *LogsHandler {
 	return &LogsHandler{queries: queries}
 }
 
-// RegisterRoutes registers log routes
-func (h *LogsHandler) RegisterRoutes(router fiber.Router) {
-	logs := router.Group("/logs")
+// RegisterProtectedRoutes registers authenticated log routes on a /logs group.
+func (h *LogsHandler) RegisterProtectedRoutes(router fiber.Router) {
+	router.Get("/timeline", h.GetTimeline)
+	router.Get("/me", h.GetMyLogs)
+	router.Get("/me/:mediaId", h.GetLogForMedia)
+	router.Post("/", h.CreateLog)
+	router.Put("/:id", h.UpdateLog)
+	router.Delete("/:id", h.DeleteLog)
+}
 
-	// Public routes
-	logs.Get("/timeline", h.GetTimeline)
+func currentUserIDFromLocals(c *fiber.Ctx) (pgtype.UUID, int, string) {
+	userIDStr, ok := c.Locals("userID").(string)
+	if !ok || userIDStr == "" {
+		return pgtype.UUID{}, fiber.StatusUnauthorized, "authentication required"
+	}
 
-	// Protected routes
-	logs.Get("/me", h.GetMyLogs)
-	logs.Get("/me/:mediaId", h.GetLogForMedia)
-	logs.Post("/", h.CreateLog)
-	logs.Put("/:id", h.UpdateLog)
-	logs.Delete("/:id", h.DeleteLog)
+	var userID pgtype.UUID
+	if err := userID.Scan(userIDStr); err != nil {
+		return pgtype.UUID{}, fiber.StatusBadRequest, "invalid user id"
+	}
+
+	return userID, 0, ""
 }
 
 // GetTimeline returns activity feed from followed users
 func (h *LogsHandler) GetTimeline(c *fiber.Ctx) error {
-	userIDStr := c.Locals("userID").(string)
-
-	var userID pgtype.UUID
-	if err := userID.Scan(userIDStr); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "invalid user id",
+	userID, status, message := currentUserIDFromLocals(c)
+	if message != "" {
+		return c.Status(status).JSON(fiber.Map{
+			"error": message,
 		})
 	}
 
@@ -58,7 +65,7 @@ func (h *LogsHandler) GetTimeline(c *fiber.Ctx) error {
 		offset = 0
 	}
 
-	logs, err := h.queries.GetTimeline(c.Context(), db.GetTimelineParams{
+	logs, err := h.queries.GetTimeline(c.UserContext(), db.GetTimelineParams{
 		FollowerID: userID,
 		Limit:      int32(limit),
 		Offset:     int32(offset),
@@ -69,6 +76,8 @@ func (h *LogsHandler) GetTimeline(c *fiber.Ctx) error {
 			"error": "failed to fetch timeline",
 		})
 	}
+
+	logs = ensureSlice(logs)
 
 	return c.JSON(fiber.Map{
 		"logs": logs,
@@ -81,12 +90,10 @@ func (h *LogsHandler) GetTimeline(c *fiber.Ctx) error {
 
 // GetMyLogs returns current user's logs
 func (h *LogsHandler) GetMyLogs(c *fiber.Ctx) error {
-	userIDStr := c.Locals("userID").(string)
-
-	var userID pgtype.UUID
-	if err := userID.Scan(userIDStr); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "invalid user id",
+	userID, authStatus, message := currentUserIDFromLocals(c)
+	if message != "" {
+		return c.Status(authStatus).JSON(fiber.Map{
+			"error": message,
 		})
 	}
 
@@ -104,7 +111,7 @@ func (h *LogsHandler) GetMyLogs(c *fiber.Ctx) error {
 		offset = 0
 	}
 
-	logs, err := h.queries.ListLogsByUser(c.Context(), db.ListLogsByUserParams{
+	logs, err := h.queries.ListLogsByUser(c.UserContext(), db.ListLogsByUserParams{
 		UserID:  userID,
 		Column2: status,
 		Limit:   int32(limit),
@@ -117,6 +124,8 @@ func (h *LogsHandler) GetMyLogs(c *fiber.Ctx) error {
 		})
 	}
 
+	logs = ensureSlice(logs)
+
 	return c.JSON(fiber.Map{
 		"logs": logs,
 		"pagination": fiber.Map{
@@ -128,15 +137,14 @@ func (h *LogsHandler) GetMyLogs(c *fiber.Ctx) error {
 
 // GetLogForMedia returns log for specific media
 func (h *LogsHandler) GetLogForMedia(c *fiber.Ctx) error {
-	userIDStr := c.Locals("userID").(string)
-	mediaIDStr := c.Params("mediaId")
-
-	var userID pgtype.UUID
-	if err := userID.Scan(userIDStr); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "invalid user id",
+	userID, status, message := currentUserIDFromLocals(c)
+	if message != "" {
+		return c.Status(status).JSON(fiber.Map{
+			"error": message,
 		})
 	}
+
+	mediaIDStr := c.Params("mediaId")
 
 	var mediaID pgtype.UUID
 	if err := mediaID.Scan(mediaIDStr); err != nil {
@@ -145,7 +153,7 @@ func (h *LogsHandler) GetLogForMedia(c *fiber.Ctx) error {
 		})
 	}
 
-	log, err := h.queries.GetLogByUserAndMedia(c.Context(), db.GetLogByUserAndMediaParams{
+	log, err := h.queries.GetLogByUserAndMedia(c.UserContext(), db.GetLogByUserAndMediaParams{
 		UserID:  userID,
 		MediaID: mediaID,
 	})
@@ -180,12 +188,10 @@ type CreateLogRequest struct {
 
 // CreateLog creates a new log entry
 func (h *LogsHandler) CreateLog(c *fiber.Ctx) error {
-	userIDStr := c.Locals("userID").(string)
-
-	var userID pgtype.UUID
-	if err := userID.Scan(userIDStr); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "invalid user id",
+	userID, status, message := currentUserIDFromLocals(c)
+	if message != "" {
+		return c.Status(status).JSON(fiber.Map{
+			"error": message,
 		})
 	}
 
@@ -216,7 +222,7 @@ func (h *LogsHandler) CreateLog(c *fiber.Ctx) error {
 	}
 
 	// Check if log already exists for this user+media
-	_, err := h.queries.GetLogByUserAndMedia(c.Context(), db.GetLogByUserAndMediaParams{
+	_, err := h.queries.GetLogByUserAndMedia(c.UserContext(), db.GetLogByUserAndMediaParams{
 		UserID:  userID,
 		MediaID: mediaID,
 	})
@@ -266,7 +272,7 @@ func (h *LogsHandler) CreateLog(c *fiber.Ctx) error {
 		params.Total = pgtype.Int4{Int32: *req.Total, Valid: true}
 	}
 
-	log, err := h.queries.CreateLog(c.Context(), params)
+	log, err := h.queries.CreateLog(c.UserContext(), params)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to create log",
@@ -291,15 +297,14 @@ type UpdateLogRequest struct {
 
 // UpdateLog updates an existing log
 func (h *LogsHandler) UpdateLog(c *fiber.Ctx) error {
-	userIDStr := c.Locals("userID").(string)
-	logIDStr := c.Params("id")
-
-	var userID pgtype.UUID
-	if err := userID.Scan(userIDStr); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "invalid user id",
+	userID, status, message := currentUserIDFromLocals(c)
+	if message != "" {
+		return c.Status(status).JSON(fiber.Map{
+			"error": message,
 		})
 	}
+
+	logIDStr := c.Params("id")
 
 	var logID pgtype.UUID
 	if err := logID.Scan(logIDStr); err != nil {
@@ -309,7 +314,7 @@ func (h *LogsHandler) UpdateLog(c *fiber.Ctx) error {
 	}
 
 	// Verify log exists and belongs to user
-	existing, err := h.queries.GetLogByID(c.Context(), logID)
+	existing, err := h.queries.GetLogByID(c.UserContext(), logID)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -397,7 +402,7 @@ func (h *LogsHandler) UpdateLog(c *fiber.Ctx) error {
 		params.ContainsSpoilers = pgtype.Bool{Bool: *req.ContainsSpoilers, Valid: true}
 	}
 
-	updated, err := h.queries.UpdateLog(c.Context(), params)
+	updated, err := h.queries.UpdateLog(c.UserContext(), params)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to update log",
@@ -409,15 +414,14 @@ func (h *LogsHandler) UpdateLog(c *fiber.Ctx) error {
 
 // DeleteLog deletes a log
 func (h *LogsHandler) DeleteLog(c *fiber.Ctx) error {
-	userIDStr := c.Locals("userID").(string)
-	logIDStr := c.Params("id")
-
-	var userID pgtype.UUID
-	if err := userID.Scan(userIDStr); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "invalid user id",
+	userID, status, message := currentUserIDFromLocals(c)
+	if message != "" {
+		return c.Status(status).JSON(fiber.Map{
+			"error": message,
 		})
 	}
+
+	logIDStr := c.Params("id")
 
 	var logID pgtype.UUID
 	if err := logID.Scan(logIDStr); err != nil {
@@ -427,7 +431,7 @@ func (h *LogsHandler) DeleteLog(c *fiber.Ctx) error {
 	}
 
 	// Verify log exists and belongs to user
-	existing, err := h.queries.GetLogByID(c.Context(), logID)
+	existing, err := h.queries.GetLogByID(c.UserContext(), logID)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -445,7 +449,7 @@ func (h *LogsHandler) DeleteLog(c *fiber.Ctx) error {
 		})
 	}
 
-	err = h.queries.DeleteLog(c.Context(), logID)
+	err = h.queries.DeleteLog(c.UserContext(), logID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to delete log",
