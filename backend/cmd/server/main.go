@@ -10,7 +10,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/medialogg/backend/internal/api"
 	"github.com/medialogg/backend/internal/config"
 	"github.com/medialogg/backend/internal/db"
@@ -24,13 +24,13 @@ func main() {
 
 	var queries *db.Queries
 	if cfg.DatabaseURL != "" {
-		conn, err := pgx.Connect(ctx, cfg.DatabaseURL)
+		pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
 		if err != nil {
 			log.Printf("database connection failed: %v", err)
 			log.Println("continuing without database connection")
 		} else {
-			defer conn.Close(ctx)
-			queries = db.New(conn)
+			defer pool.Close()
+			queries = db.New(pool)
 			log.Println("database connected successfully")
 		}
 	} else {
