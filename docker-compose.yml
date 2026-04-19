@@ -15,6 +15,22 @@ services:
       timeout: 5s
       retries: 5
 
+  migrate:
+    image: migrate/migrate:v4.18.1
+    command:
+      [
+        "-path",
+        "/migrations",
+        "-database",
+        "postgres://medialogg:${DB_PASSWORD:-medialogg}@postgres:5432/medialogg?sslmode=disable",
+        "up"
+      ]
+    volumes:
+      - ./backend/migrations:/migrations:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   backend:
     build:
       context: ./backend
@@ -26,8 +42,8 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 10s
@@ -41,6 +57,7 @@ services:
       args:
         NUXT_PUBLIC_API_BASE_URL: http://localhost:8080
     environment:
+      NUXT_API_BASE_URL: http://backend:8080
       NUXT_PUBLIC_API_BASE_URL: http://localhost:8080
     ports:
       - "3001:3000"

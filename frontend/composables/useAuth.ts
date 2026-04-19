@@ -34,12 +34,12 @@ export const useAuth = () => {
   
   // State
   const user = useState<User | null>('auth:user', () => null)
-  const token = useCookie('auth:token', {
+  const token = useCookie('auth_token', {
     maxAge: 60 * 60 * 24 * 7, // 7 days
     httpOnly: false, // Client-side accessible
     sameSite: 'strict'
   })
-  const refreshToken = useCookie('auth:refresh', {
+  const refreshToken = useCookie('auth_refresh', {
     maxAge: 60 * 60 * 24 * 30, // 30 days
     sameSite: 'strict'
   })
@@ -121,13 +121,13 @@ export const useAuth = () => {
     if (!token.value) return null
     
     try {
-      const response = await request<{ user: User }>('/api/auth/me', {
+      const response = await request<User>('/api/auth/me', {
         headers: {
           'Authorization': `Bearer ${token.value}`
         }
       })
-      user.value = response.user
-      return response.user
+      user.value = response
+      return response
     } catch (err) {
       // Token might be expired, try to refresh
       await tryRefreshToken()
