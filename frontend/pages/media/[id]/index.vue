@@ -31,21 +31,43 @@
 <script setup lang="ts">
 type MediaItem = {
   id: string
+  ID?: string
   title: string
+  Title?: string
   description?: string
+  Description?: string
   type?: string
+  Type?: string
   rating?: number | string
   image_url?: string
   poster?: string
   poster_url?: string
+  CoverImage?: string
+}
+
+const normalizeMediaItem = (item: MediaItem | null | undefined): MediaItem | null => {
+  if (!item) {
+    return null
+  }
+
+  return {
+    id: item.id || item.ID || '',
+    title: item.title || item.Title || 'Untitled media',
+    description: item.description || item.Description,
+    type: item.type || item.Type,
+    rating: item.rating,
+    image_url: item.image_url,
+    poster: item.poster,
+    poster_url: item.poster_url || item.CoverImage
+  }
 }
 
 const route = useRoute()
 const { getMedia } = useMedia()
 
 const { data, pending, error } = await useAsyncData<MediaItem>(`media-${route.params.id}`, async () => {
-  const response = await getMedia(String(route.params.id))
-  return (response as MediaItem) || null
+  const response = await getMedia(String(route.params.id)) as { media?: MediaItem }
+  return normalizeMediaItem(response.media)
 })
 
 const media = computed(() => data.value)
