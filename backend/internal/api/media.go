@@ -1,0 +1,196 @@
+package api
+
+import (
+	"strconv"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/medialogg/backend/internal/db"
+)
+
+type MediaHandler struct {
+	queries *db.Queries
+}
+
+func NewMediaHandler(queries *db.Queries) *MediaHandler {
+	return &MediaHandler{queries: queries}
+}
+
+// RegisterRoutes registers media routes
+func (h *MediaHandler) RegisterRoutes(router fiber.Router) {
+	media := router.Group("/media")
+
+	media.Get("/", h.ListMedia)
+	media.Get("/search", h.SearchMedia)
+	media.Get("/:id", h.GetMedia)
+	media.Get("/:id/reviews", h.GetMediaReviews)
+}
+
+// ListMedia lists media with optional filtering
+func (h *MediaHandler) ListMedia(c *fiber.Ctx) error {
+	// Query params:
+	// - type: filter by media type (film, anime, book, manga, game, doujin)
+	// - limit: page size (default 20, max 50)
+	// - offset: pagination offset (default 0)
+
+	mediaType := c.Query("type")
+	limit, _ := strconv.Atoi(c.Query("limit", "20"))
+	offset, _ := strconv.Atoi(c.Query("offset", "0"))
+
+	if limit > 50 {
+		limit = 50
+	}
+	if limit < 1 {
+		limit = 20
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	media, err := h.queries.ListMedia(c.Context(), db.ListMediaParams{
+		Column1: mediaType,
+		Limit:   int32(limit),
+		Offset:  int32(offset),
+	})
+
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch media",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"media": media,
+		"pagination": fiber.Map{
+			"limit":  limit,
+			"offset": offset,
+		},
+	})
+}
+
+// SearchMedia searches media by title
+func (h *MediaHandler) SearchMedia(c *fiber.Ctx) error {
+	// Query params:
+	// - q: search query (required)
+	// - type: filter by media type
+	// - limit: page size (default 20, max 50)
+	// - offset: pagination offset
+
+	query := c.Query("q")
+	if query == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "search query is required",
+		})
+	}
+
+	mediaType := c.Query("type")
+	limit, _ := strconv.Atoi(c.Query("limit", "20"))
+	offset, _ := strconv.Atoi(c.Query("offset", "0"))
+
+	if limit > 50 {
+		limit = 50
+	}
+	if limit < 1 {
+		limit = 20
+	}
+
+	media, err := h.queries.SearchMedia(c.Context(), db.SearchMediaParams{
+		PlaintoTsvector: query,
+		Column2:         mediaType,
+		Limit:           int32(limit),
+		Offset:          int32(offset),
+	})
+
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to search media",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"media": media,
+		"query": query,
+		"pagination": fiber.Map{
+			"limit":  limit,
+			"offset": offset,
+		},
+	})
+}
+
+// GetMedia gets a single media by ID
+func (h *MediaHandler) GetMedia(c *fiber.Ctx) error {
+	idStr := c.Params("id")
+
+	var id pgtype.UUID
+	if err := id.Scan(idStr); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "invalid media id",
+		})
+	}
+
+	media, err := h.queries.GetMediaByID(c.Context(), id)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "media not found",
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch media",
+		})
+	}
+
+	// Get genres for this media
+	genres, _ := h.queries.GetMediaGenres(c.Context(), media.ID)
+
+	return c.JSON(fiber.Map{
+		"media":  media,
+		"genres": genres,
+	})
+}
+
+// GetMediaReviews gets reviews for a media
+func (h *MediaHandler) GetMediaReviews(c *fiber.Ctx) error {
+	idStr := c.Params("id")
+
+	var id pgtype.UUID
+	if err := id.Scan(idStr); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "invalid media id",
+		})
+	}
+
+	limit, _ := strconv.Atoi(c.Query("limit", "20"))
+	offset, _ := strconv.Atoi(c.Query("offset", "0"))
+
+	if limit > 50 {
+		limit = 50
+	}
+	if limit < 1 {
+		limit = 20
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	reviews, err := h.queries.ListReviewsByMedia(c.Context(), db.ListReviewsByMediaParams{
+		MediaID: id,
+		Limit:   int32(limit),
+		Offset:  int32(offset),
+	})
+
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch reviews",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"reviews": reviews,
+		"pagination": fiber.Map{
+			"limit":  limit,
+			"offset": offset,
+		},
+	})
+}

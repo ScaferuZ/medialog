@@ -51,10 +51,16 @@ func GenerateTokenPair(userID pgtype.UUID, username, email, jwtSecret string) (*
 	}
 
 	// Create refresh token
-	refreshClaims := jwt.RegisteredClaims{
-		Subject:   userIDStr,
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(refreshTokenExpiry)),
-		IssuedAt:  jwt.NewNumericDate(time.Now()),
+	refreshClaims := Claims{
+		UserID:   userIDStr,
+		Username: username,
+		Email:    email,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   userIDStr,
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(refreshTokenExpiry)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			NotBefore: jwt.NewNumericDate(time.Now()),
+		},
 	}
 
 	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims)

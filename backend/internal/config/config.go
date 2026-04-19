@@ -11,12 +11,14 @@ type Config struct {
 	ServerPort  string
 	DatabaseURL string
 	JWTSecret   string
+	TMDBAPIKey  string
 }
 
 func Load() Config {
 	viper.SetDefault("SERVER_PORT", "8080")
 	viper.SetDefault("DATABASE_URL", "")
 	viper.SetDefault("JWT_SECRET", "change-me")
+	viper.SetDefault("TMDB_API_KEY", "")
 
 	viper.AutomaticEnv()
 
@@ -24,6 +26,7 @@ func Load() Config {
 		ServerPort:  viper.GetString("SERVER_PORT"),
 		DatabaseURL: viper.GetString("DATABASE_URL"),
 		JWTSecret:   viper.GetString("JWT_SECRET"),
+		TMDBAPIKey:  viper.GetString("TMDB_API_KEY"),
 	}
 
 	if _, err := strconv.Atoi(cfg.ServerPort); err != nil {

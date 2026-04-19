@@ -8,6 +8,78 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Follow struct {
+	ID          pgtype.UUID
+	FollowerID  pgtype.UUID
+	FollowingID pgtype.UUID
+	CreatedAt   pgtype.Timestamptz
+}
+
+type Genre struct {
+	ID   pgtype.UUID
+	Name string
+}
+
+type Like struct {
+	ID        pgtype.UUID
+	UserID    pgtype.UUID
+	LogID     pgtype.UUID
+	ReviewID  pgtype.UUID
+	CreatedAt pgtype.Timestamptz
+}
+
+type Log struct {
+	ID               pgtype.UUID
+	UserID           pgtype.UUID
+	MediaID          pgtype.UUID
+	Status           string
+	Rating           pgtype.Numeric
+	StartedAt        pgtype.Date
+	CompletedAt      pgtype.Date
+	RewatchCount     pgtype.Int4
+	Progress         pgtype.Int4
+	Total            pgtype.Int4
+	Note             pgtype.Text
+	ContainsSpoilers pgtype.Bool
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
+type MediaGenre struct {
+	MediaID pgtype.UUID
+	GenreID pgtype.UUID
+}
+
+type Medium struct {
+	ID            pgtype.UUID
+	Type          string
+	Title         string
+	OriginalTitle pgtype.Text
+	Description   pgtype.Text
+	CoverImage    pgtype.Text
+	ReleaseDate   pgtype.Date
+	Metadata      []byte
+	TmdbID        pgtype.Text
+	MalID         pgtype.Int4
+	GoogleBooksID pgtype.Text
+	IgdbID        pgtype.Int4
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+}
+
+type Review struct {
+	ID               pgtype.UUID
+	UserID           pgtype.UUID
+	MediaID          pgtype.UUID
+	LogID            pgtype.UUID
+	Title            pgtype.Text
+	Content          string
+	Rating           pgtype.Numeric
+	ContainsSpoilers pgtype.Bool
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
 type User struct {
 	ID           pgtype.UUID
 	Username     string

@@ -14,7 +14,7 @@ import (
 	"github.com/medialogg/backend/internal/api"
 	"github.com/medialogg/backend/internal/config"
 	"github.com/medialogg/backend/internal/db"
-	"github.com/medialogg/backend/internal/middleware"
+	"github.com/medialogg/backend/internal/tmdb"
 )
 
 func main() {
@@ -52,14 +52,21 @@ func main() {
 
 	if queries != nil {
 		authHandler := api.NewAuthHandler(queries, cfg.JWTSecret)
+		mediaHandler := api.NewMediaHandler(queries)
+		logsHandler := api.NewLogsHandler(queries)
+		socialHandler := api.NewSocialHandler(queries)
+		usersHandler := api.NewUsersHandler(queries)
 
-		api := app.Group("/api")
-		auth := api.Group("/auth")
+		// Initialize TMDB client if API key is available
+		var tmdbHandler *api.TMDBHandler
+		if cfg.TMDBAPIKey != "" {
+			tmdbClient := tmdb.NewClient(cfg.TMDBAPIKey)
+			tmdbHandler = api.NewTMDBHandler(tmdbClient, queries)
+			log.Println("TMDB client initialized")
+		}
 
-		auth.Post("/register", authHandler.Register)
-		auth.Post("/login", authHandler.Login)
-		auth.Post("/refresh", authHandler.Refresh)
-		auth.Get("/me", middleware.AuthMiddleware(cfg.JWTSecret), authHandler.Me)
+		apiGroup := app.Group("/api")
+		api.SetupRoutes(apiGroup, authHandler, mediaHandler, logsHandler, socialHandler, usersHandler, tmdbHandler, cfg.JWTSecret)
 	}
 
 	go func() {
