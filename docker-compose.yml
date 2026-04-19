@@ -39,6 +39,7 @@ services:
       DATABASE_URL: postgres://medialogg:${DB_PASSWORD:-medialogg}@postgres:5432/medialogg?sslmode=disable
       SERVER_PORT: 8080
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      TMDB_API_KEY: ${TMDB_API_KEY:-}
     ports:
       - "8080:8080"
     depends_on:
@@ -59,6 +60,7 @@ services:
     environment:
       NUXT_API_BASE_URL: http://backend:8080
       NUXT_PUBLIC_API_BASE_URL: http://localhost:8080
+      NUXT_PUBLIC_TMDB_ENABLED: ${NUXT_PUBLIC_TMDB_ENABLED:-false}
     ports:
       - "3001:3000"
     depends_on:
