@@ -217,7 +217,7 @@ func (q *Queries) ListGenres(ctx context.Context) ([]Genre, error) {
 
 const listMedia = `-- name: ListMedia :many
 SELECT id, type, title, original_title, description, cover_image, release_date, metadata, tmdb_id, mal_id, google_books_id, igdb_id, created_at, updated_at FROM media 
-WHERE ($1::varchar IS NULL OR type = $1)
+WHERE (NULLIF($1::varchar, '') IS NULL OR type = $1)
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
 `
@@ -280,10 +280,10 @@ func (q *Queries) RemoveMediaGenre(ctx context.Context, arg RemoveMediaGenrePara
 const searchMedia = `-- name: SearchMedia :many
 SELECT id, type, title, original_title, description, cover_image, release_date, metadata, tmdb_id, mal_id, google_books_id, igdb_id, created_at, updated_at FROM media 
 WHERE (
-    to_tsvector('english', title) @@ plainto_tsvector('english', $1)
+    to_tsvector('english', title) @@ plainto_tsquery('english', $1)
     OR title ILIKE '%' || $1 || '%'
 )
-AND ($2::varchar IS NULL OR type = $2)
+AND (NULLIF($2::varchar, '') IS NULL OR type = $2)
 ORDER BY 
     CASE WHEN title ILIKE $1 || '%' THEN 0 ELSE 1 END,
     created_at DESC
@@ -291,15 +291,15 @@ LIMIT $3 OFFSET $4
 `
 
 type SearchMediaParams struct {
-	PlaintoTsvector interface{}
-	Column2         string
-	Limit           int32
-	Offset          int32
+	Query  string
+	Column2 string
+	Limit  int32
+	Offset int32
 }
 
 func (q *Queries) SearchMedia(ctx context.Context, arg SearchMediaParams) ([]Medium, error) {
 	rows, err := q.db.Query(ctx, searchMedia,
-		arg.PlaintoTsvector,
+		arg.Query,
 		arg.Column2,
 		arg.Limit,
 		arg.Offset,

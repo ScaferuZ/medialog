@@ -214,7 +214,7 @@ SELECT
     COUNT(*) FILTER (WHERE status = 'in_progress') as in_progress_count,
     COUNT(*) FILTER (WHERE status = 'planned') as planned_count,
     COUNT(*) FILTER (WHERE status = 'dropped') as dropped_count,
-    AVG(rating) FILTER (WHERE rating IS NOT NULL) as average_rating,
+    COALESCE(AVG(rating) FILTER (WHERE rating IS NOT NULL), 0) as average_rating,
     COUNT(DISTINCT media_id) as total_media
 FROM logs 
 WHERE user_id = $1
@@ -316,7 +316,7 @@ func (q *Queries) ListLogsByMedia(ctx context.Context, arg ListLogsByMediaParams
 const listLogsByUser = `-- name: ListLogsByUser :many
 SELECT id, user_id, media_id, status, rating, started_at, completed_at, rewatch_count, progress, total, note, contains_spoilers, created_at, updated_at FROM logs 
 WHERE user_id = $1 
-AND ($2::varchar IS NULL OR status = $2)
+AND (NULLIF($2::varchar, '') IS NULL OR status = $2)
 ORDER BY created_at DESC
 LIMIT $3 OFFSET $4
 `

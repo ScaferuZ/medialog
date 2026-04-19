@@ -15,10 +15,10 @@ SELECT * FROM media WHERE tmdb_id = $1;
 -- name: SearchMedia :many
 SELECT * FROM media 
 WHERE (
-    to_tsvector('english', title) @@ plainto_tsvector('english', $1)
+    to_tsvector('english', title) @@ plainto_tsquery('english', $1)
     OR title ILIKE '%' || $1 || '%'
 )
-AND ($2::varchar IS NULL OR type = $2)
+AND (NULLIF($2::varchar, '') IS NULL OR type = $2)
 ORDER BY 
     CASE WHEN title ILIKE $1 || '%' THEN 0 ELSE 1 END,
     created_at DESC
@@ -26,7 +26,7 @@ LIMIT $3 OFFSET $4;
 
 -- name: ListMedia :many
 SELECT * FROM media 
-WHERE ($1::varchar IS NULL OR type = $1)
+WHERE (NULLIF($1::varchar, '') IS NULL OR type = $1)
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3;
 
