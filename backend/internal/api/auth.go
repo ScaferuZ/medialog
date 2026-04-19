@@ -3,12 +3,14 @@ package api
 import (
 	"context"
 	"errors"
+	"log"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/medialogg/backend/internal/config"
@@ -30,7 +32,7 @@ func validateUsername(fl validator.FieldLevel) bool {
 
 type RegisterRequest struct {
 	Username string `json:"username" validate:"required,min=3,max=50,username"`
-	Email    string `json:"email" validate:"required,email"`
+	Email    string `json:"email" validate:"required,email,max=255"`
 	Password string `json:"password" validate:"required,min=8"`
 }
 
@@ -110,14 +112,8 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	})
 
 	if err != nil {
-		if strings.Contains(err.Error(), "unique constraint") || strings.Contains(err.Error(), "duplicate key") {
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"error": "username or email already exists",
-			})
-		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to create user",
-		})
+		status, response := registerCreateUserErrorResponse(err)
+		return c.Status(status).JSON(response)
 	}
 
 	tokens, err := config.GenerateTokenPair(uuidToString(user.ID), user.Username, user.Email, h.jwtSecret)
@@ -133,6 +129,38 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 		RefreshToken: tokens.RefreshToken,
 		ExpiresIn:    tokens.ExpiresIn,
 	})
+}
+
+func registerCreateUserErrorResponse(err error) (int, fiber.Map) {
+	log.Printf("create user failed: %v", err)
+
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		switch pgErr.Code {
+		case "23505":
+			return fiber.StatusConflict, fiber.Map{
+				"error": "username or email already exists",
+			}
+		case "22001":
+			return fiber.StatusBadRequest, fiber.Map{
+				"error": "one or more fields exceed the allowed length",
+			}
+		case "42P01":
+			return fiber.StatusInternalServerError, fiber.Map{
+				"error": "registration is unavailable because the database schema is not initialized",
+			}
+		}
+	}
+
+	if strings.Contains(err.Error(), "unique constraint") || strings.Contains(err.Error(), "duplicate key") {
+		return fiber.StatusConflict, fiber.Map{
+			"error": "username or email already exists",
+		}
+	}
+
+	return fiber.StatusInternalServerError, fiber.Map{
+		"error": "failed to create user",
+	}
 }
 
 func (h *AuthHandler) Login(c *fiber.Ctx) error {
