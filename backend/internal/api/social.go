@@ -22,8 +22,48 @@ func (h *SocialHandler) RegisterPublicUserRoutes(router fiber.Router) {
 }
 
 func (h *SocialHandler) RegisterProtectedUserRoutes(router fiber.Router) {
+	router.Get("/:username/follow-status", h.GetFollowStatus)
 	router.Post("/:username/follow", h.FollowUser)
 	router.Delete("/:username/follow", h.UnfollowUser)
+}
+
+func (h *SocialHandler) GetFollowStatus(c *fiber.Ctx) error {
+	followerID := c.Locals("userID").(string)
+	username := c.Params("username")
+
+	targetUser, err := h.queries.GetUserByUsername(c.UserContext(), username)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "user not found",
+		})
+	}
+
+	if uuidToString(targetUser.ID) == followerID {
+		return c.JSON(fiber.Map{
+			"following": false,
+		})
+	}
+
+	followerUUID, err := stringToPgUUID(followerID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "invalid follower ID",
+		})
+	}
+
+	isFollowing, err := h.queries.IsFollowing(c.UserContext(), db.IsFollowingParams{
+		FollowerID:  followerUUID,
+		FollowingID: targetUser.ID,
+	})
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch follow status",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"following": isFollowing,
+	})
 }
 
 func (h *SocialHandler) RegisterProtectedLogRoutes(router fiber.Router) {

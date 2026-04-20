@@ -24,7 +24,9 @@
               </div>
             </div>
 
-            <div v-if="isOwnProfile" class="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-sm font-medium text-cyan-200">
+            <div v-if="!hasMounted" class="h-10 w-24 rounded-full border border-white/10 bg-white/5"></div>
+
+            <div v-else-if="isOwnProfile" class="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-sm font-medium text-cyan-200">
               Your profile
             </div>
 
@@ -57,7 +59,7 @@
 <script setup lang="ts">
 const route = useRoute()
 const username = computed(() => String(route.params.username || ''))
-const { getUserProfile, getUserStats, followUser } = useUsers()
+const { getUserProfile, getUserStats, getFollowStatus, followUser } = useUsers()
 const { user, isAuthenticated } = useAuth()
 
 interface UserProfile {
@@ -81,6 +83,7 @@ const profile = ref<UserProfile | null>(null)
 const stats = ref({ completed: 0, inProgress: 0, followers: 0, following: 0 })
 const error = ref('')
 const following = ref(false)
+const hasMounted = ref(false)
 const isOwnProfile = computed(() => isAuthenticated.value && user.value?.username === username.value)
 
 const initials = computed(() => (profile.value?.username || username.value || '?').slice(0, 1).toUpperCase())
@@ -90,6 +93,20 @@ const statsCards = computed(() => [
   { label: 'Followers', value: stats.value.followers },
   { label: 'Following', value: stats.value.following }
 ])
+
+const syncFollowState = async () => {
+  if (!isAuthenticated.value || isOwnProfile.value) {
+    following.value = false
+    return
+  }
+
+  try {
+    const response = await getFollowStatus(username.value) as { following?: boolean }
+    following.value = !!response.following
+  } catch {
+    following.value = false
+  }
+}
 
 await useAsyncData(`user-profile-${username.value}`, async () => {
   try {
@@ -105,9 +122,19 @@ await useAsyncData(`user-profile-${username.value}`, async () => {
       followers: statsData?.followers_count ?? 0,
       following: statsData?.following_count ?? 0
     }
+
+    await syncFollowState()
   } catch (e: any) {
     error.value = e?.message || 'Failed to load profile.'
   }
+})
+
+watch([isAuthenticated, isOwnProfile, username], () => {
+  void syncFollowState()
+})
+
+onMounted(() => {
+  hasMounted.value = true
 })
 
 const onFollow = async () => {
@@ -118,6 +145,7 @@ const onFollow = async () => {
   try {
     await followUser(username.value)
     following.value = true
+    stats.value.followers += 1
   } catch (e: any) {
     error.value = e?.message || 'Failed to follow user.'
   }
