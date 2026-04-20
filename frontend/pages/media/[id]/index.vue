@@ -21,7 +21,10 @@
         <div class="rounded-full border border-white/10 px-4 py-2 text-slate-300">Rating: <span class="text-cyan-300">{{ media.rating ?? '—' }}</span></div>
       </div>
 
-      <button class="rounded-xl bg-cyan-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-cyan-300">
+      <button
+        class="rounded-xl bg-cyan-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-cyan-300"
+        @click="handleLogThis"
+      >
         Log This
       </button>
     </section>
@@ -43,6 +46,24 @@ type MediaItem = {
   poster?: string
   poster_url?: string
   CoverImage?: string
+  Metadata?: string
+  TmdbID?: string
+}
+
+const decodeBase64JSON = (value?: string) => {
+  if (!value) {
+    return null
+  }
+
+  try {
+    const decoded = process.server
+      ? Buffer.from(value, 'base64').toString('utf-8')
+      : window.atob(value)
+
+    return JSON.parse(decoded) as Record<string, unknown>
+  } catch {
+    return null
+  }
 }
 
 const normalizeMediaItem = (item: MediaItem | null | undefined): MediaItem | null => {
@@ -50,20 +71,26 @@ const normalizeMediaItem = (item: MediaItem | null | undefined): MediaItem | nul
     return null
   }
 
+  const metadata = decodeBase64JSON(item.Metadata)
+  const metadataRating = typeof metadata?.vote_average === 'number' ? metadata.vote_average : undefined
+
   return {
     id: item.id || item.ID || '',
     title: item.title || item.Title || 'Untitled media',
     description: item.description || item.Description,
     type: item.type || item.Type,
-    rating: item.rating,
+    rating: item.rating ?? metadataRating,
     image_url: item.image_url,
     poster: item.poster,
-    poster_url: item.poster_url || item.CoverImage
+    poster_url: item.poster_url || item.CoverImage,
+    TmdbID: item.TmdbID
   }
 }
 
 const route = useRoute()
+const router = useRouter()
 const { getMedia } = useMedia()
+const { isAuthenticated } = useAuth()
 
 const { data, pending, error } = await useAsyncData<MediaItem>(`media-${route.params.id}`, async () => {
   const response = await getMedia(String(route.params.id)) as { media?: MediaItem }
@@ -71,4 +98,13 @@ const { data, pending, error } = await useAsyncData<MediaItem>(`media-${route.pa
 })
 
 const media = computed(() => data.value)
+
+const handleLogThis = async () => {
+  if (!isAuthenticated.value) {
+    await router.push('/login')
+    return
+  }
+
+  await router.push(`/media/${route.params.id}/log`)
+}
 </script>
