@@ -208,6 +208,79 @@ func (q *Queries) GetTimeline(ctx context.Context, arg GetTimelineParams) ([]Get
 	return items, nil
 }
 
+const listLatestPublicActivity = `-- name: ListLatestPublicActivity :many
+SELECT 
+    l.id,
+    l.media_id,
+    l.status,
+    l.rating,
+    l.note,
+    l.created_at,
+    u.username,
+    u.display_name,
+    m.title,
+    m.cover_image,
+    m.type
+FROM logs l
+JOIN users u ON l.user_id = u.id
+JOIN media m ON l.media_id = m.id
+WHERE l.status = 'completed'
+  AND u.is_public = true
+ORDER BY l.created_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListLatestPublicActivityParams struct {
+	Limit  int32
+	Offset int32
+}
+
+type ListLatestPublicActivityRow struct {
+	ID          pgtype.UUID
+	MediaID     pgtype.UUID
+	Status      string
+	Rating      pgtype.Numeric
+	Note        pgtype.Text
+	CreatedAt   pgtype.Timestamptz
+	Username    string
+	DisplayName pgtype.Text
+	Title       string
+	CoverImage  pgtype.Text
+	Type        string
+}
+
+func (q *Queries) ListLatestPublicActivity(ctx context.Context, arg ListLatestPublicActivityParams) ([]ListLatestPublicActivityRow, error) {
+	rows, err := q.db.Query(ctx, listLatestPublicActivity, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLatestPublicActivityRow
+	for rows.Next() {
+		var i ListLatestPublicActivityRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.MediaID,
+			&i.Status,
+			&i.Rating,
+			&i.Note,
+			&i.CreatedAt,
+			&i.Username,
+			&i.DisplayName,
+			&i.Title,
+			&i.CoverImage,
+			&i.Type,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUserStats = `-- name: GetUserStats :one
 SELECT 
     COUNT(*) FILTER (WHERE status = 'completed') as completed_count,

@@ -2,6 +2,7 @@ package api
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v5"
@@ -192,9 +193,67 @@ func (h *MediaHandler) GetMediaReviews(c *fiber.Ctx) error {
 	}
 
 	reviews = ensureSlice(reviews)
+	activityLogs, logsErr := h.queries.ListLogsByMedia(c.UserContext(), db.ListLogsByMediaParams{
+		MediaID: id,
+		Limit:   int32(limit),
+		Offset:  int32(offset),
+	})
+	if logsErr != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch reviews",
+		})
+	}
+
+	reviewRows := make([]fiber.Map, 0, len(reviews))
+	existingByLogID := make(map[string]struct{}, len(reviews))
+	for _, review := range reviews {
+		logID := uuidToString(review.LogID)
+		if logID != "" {
+			existingByLogID[logID] = struct{}{}
+		}
+		reviewRows = append(reviewRows, fiber.Map{
+			"ID":               uuidToString(review.ID),
+			"UserID":           uuidToString(review.UserID),
+			"MediaID":          uuidToString(review.MediaID),
+			"LogID":            logID,
+			"Title":            review.Title,
+			"Content":          review.Content,
+			"Rating":           review.Rating,
+			"ContainsSpoilers": review.ContainsSpoilers,
+			"CreatedAt":        review.CreatedAt,
+			"UpdatedAt":        review.UpdatedAt,
+			"Username":         review.Username,
+			"DisplayName":      review.DisplayName,
+		})
+	}
+
+	for _, log := range activityLogs {
+		logID := uuidToString(log.ID)
+		if _, exists := existingByLogID[logID]; exists {
+			continue
+		}
+		if strings.TrimSpace(log.Note.String) == "" {
+			continue
+		}
+
+		reviewRows = append(reviewRows, fiber.Map{
+			"ID":               logID,
+			"UserID":           uuidToString(log.UserID),
+			"MediaID":          uuidToString(log.MediaID),
+			"LogID":            logID,
+			"Title":            nil,
+			"Content":          log.Note.String,
+			"Rating":           log.Rating,
+			"ContainsSpoilers": log.ContainsSpoilers,
+			"CreatedAt":        log.CreatedAt,
+			"UpdatedAt":        log.UpdatedAt,
+			"Username":         log.Username,
+			"DisplayName":      log.DisplayName,
+		})
+	}
 
 	return c.JSON(fiber.Map{
-		"reviews": reviews,
+		"reviews": reviewRows,
 		"pagination": fiber.Map{
 			"limit":  limit,
 			"offset": offset,

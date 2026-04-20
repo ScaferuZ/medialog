@@ -26,6 +26,7 @@ func SetupRoutes(
 
 	mediaHandler.RegisterRoutes(api)
 	usersHandler.RegisterRoutes(api)
+	api.Get("/activity/latest", logsHandler.GetLatestPublicActivity)
 	logsHandler.RegisterProtectedRoutes(api.Group("/logs", authRequired))
 	socialHandler.RegisterPublicUserRoutes(api.Group("/users"))
 	socialHandler.RegisterProtectedUserRoutes(api.Group("/users", authRequired))

@@ -29,6 +29,41 @@ func (h *LogsHandler) RegisterProtectedRoutes(router fiber.Router) {
 	router.Delete("/:id", h.DeleteLog)
 }
 
+func (h *LogsHandler) GetLatestPublicActivity(c *fiber.Ctx) error {
+	limit, _ := strconv.Atoi(c.Query("limit", "8"))
+	offset, _ := strconv.Atoi(c.Query("offset", "0"))
+
+	if limit > 20 {
+		limit = 20
+	}
+	if limit < 1 {
+		limit = 8
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	activity, err := h.queries.ListLatestPublicActivity(c.UserContext(), db.ListLatestPublicActivityParams{
+		Limit:  int32(limit),
+		Offset: int32(offset),
+	})
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch latest activity",
+		})
+	}
+
+	activity = ensureSlice(activity)
+
+	return c.JSON(fiber.Map{
+		"activity": activity,
+		"pagination": fiber.Map{
+			"limit":  limit,
+			"offset": offset,
+		},
+	})
+}
+
 func currentUserIDFromLocals(c *fiber.Ctx) (pgtype.UUID, int, string) {
 	userIDStr, ok := c.Locals("userID").(string)
 	if !ok || userIDStr == "" {
@@ -41,6 +76,43 @@ func currentUserIDFromLocals(c *fiber.Ctx) (pgtype.UUID, int, string) {
 	}
 
 	return userID, 0, ""
+}
+
+func (h *LogsHandler) syncReviewForLog(c *fiber.Ctx, log db.Log) error {
+	existingReview, err := h.queries.GetReviewByLog(c.UserContext(), log.ID)
+	if err != nil && err != pgx.ErrNoRows {
+		return err
+	}
+
+	hasReviewContent := strings.TrimSpace(log.Note.String) != ""
+	if !hasReviewContent {
+		if err == nil {
+			return h.queries.DeleteReview(c.UserContext(), existingReview.ID)
+		}
+		return nil
+	}
+
+	if err == pgx.ErrNoRows {
+		_, createErr := h.queries.CreateReview(c.UserContext(), db.CreateReviewParams{
+			UserID:           log.UserID,
+			MediaID:          log.MediaID,
+			LogID:            log.ID,
+			Title:            pgtype.Text{},
+			Content:          log.Note.String,
+			Rating:           log.Rating,
+			ContainsSpoilers: log.ContainsSpoilers,
+		})
+		return createErr
+	}
+
+	_, updateErr := h.queries.UpdateReview(c.UserContext(), db.UpdateReviewParams{
+		ID:               existingReview.ID,
+		Title:            pgtype.Text{},
+		Content:          log.Note.String,
+		Rating:           log.Rating,
+		ContainsSpoilers: log.ContainsSpoilers,
+	})
+	return updateErr
 }
 
 // GetTimeline returns activity feed from followed users
@@ -279,6 +351,12 @@ func (h *LogsHandler) CreateLog(c *fiber.Ctx) error {
 		})
 	}
 
+	if err := h.syncReviewForLog(c, log); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to sync review",
+		})
+	}
+
 	return c.Status(fiber.StatusCreated).JSON(log)
 }
 
@@ -409,6 +487,12 @@ func (h *LogsHandler) UpdateLog(c *fiber.Ctx) error {
 		})
 	}
 
+	if err := h.syncReviewForLog(c, updated); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to sync review",
+		})
+	}
+
 	return c.JSON(updated)
 }
 
@@ -446,6 +530,19 @@ func (h *LogsHandler) DeleteLog(c *fiber.Ctx) error {
 	if existing.UserID != userID {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error": "not authorized to delete this log",
+		})
+	}
+
+	review, reviewErr := h.queries.GetReviewByLog(c.UserContext(), logID)
+	if reviewErr == nil {
+		if err := h.queries.DeleteReview(c.UserContext(), review.ID); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "failed to delete review",
+			})
+		}
+	} else if reviewErr != pgx.ErrNoRows {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch review",
 		})
 	}
 

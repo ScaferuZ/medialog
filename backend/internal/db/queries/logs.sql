@@ -65,3 +65,24 @@ WHERE l.user_id IN (
 OR l.user_id = $1
 ORDER BY l.created_at DESC
 LIMIT $2 OFFSET $3;
+
+-- name: ListLatestPublicActivity :many
+SELECT 
+    l.id,
+    l.media_id,
+    l.status,
+    l.rating,
+    l.note,
+    l.created_at,
+    u.username,
+    u.display_name,
+    m.title,
+    m.cover_image,
+    m.type
+FROM logs l
+JOIN users u ON l.user_id = u.id
+JOIN media m ON l.media_id = m.id
+WHERE l.status = 'completed'
+  AND u.is_public = true
+ORDER BY l.created_at DESC
+LIMIT $1 OFFSET $2;
